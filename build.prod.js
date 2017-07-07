@@ -6643,7 +6643,6 @@ var _initialiseProps = function _initialiseProps() {
 
   this.onDrop = function (event) {
     if (_this2.props.readOnly) return;
-    if (!_this2.isInEditor(event.target)) return;
 
     event.preventDefault();
 
@@ -6684,8 +6683,10 @@ var _initialiseProps = function _initialiseProps() {
       isFocused: true
     });
 
-    // If the target is inside a void node, abort.
-    if (state.document.hasVoidParent(point.key)) return;
+    // If the target is inside a void node.
+    if (state.document.hasVoidParent(point.key)) {
+      data.isInsideVoid = true;
+    }
 
     // Add drop-specific information to the data.
     data.target = target;
@@ -10593,16 +10594,31 @@ var Node = {
     node.assertDescendant(startKey);
     node.assertDescendant(endKey);
 
+    var originalFurthestAncestor = node.getFurthestAncestor(startKey);
+
     // Split at the start and end.
     var start = range.collapseToStart();
     node = node.splitBlockAtRange(start, Infinity);
 
-    var next = node.getNextText(startKey);
+    var furthestAncestor = node.getFurthestAncestor(startKey);
+
+    var isSameAncestor = true;
+    var next = void 0;
+
+    if (originalFurthestAncestor.key !== furthestAncestor.key) {
+      isSameAncestor = false;
+      next = node.getNode(startKey);
+    } else {
+      next = node.getNextText(startKey);
+    }
+
     var end = startKey == endKey ? range.collapseToStartOf(next).move(endOffset - startOffset) : range.collapseToEnd();
+
     node = node.splitBlockAtRange(end, Infinity);
 
     // Get the start and end nodes.
-    var startNode = node.getNextSibling(node.getFurthestAncestor(startKey).key);
+    var startNode = isSameAncestor ? node.getNextSibling(node.getFurthestAncestor(startKey).key) : node.getFurthestAncestor(startKey);
+
     var endNode = startKey == endKey ? node.getFurthestAncestor(next.key) : node.getFurthestAncestor(endKey);
 
     // Get children range of nodes from start to end nodes
@@ -13625,6 +13641,38 @@ var Stack = function (_ref) {
   return Stack;
 }(new _immutable.Record(DEFAULTS));
 
+function callEventMethodsOfPlugins(index, method, plugins, state, editor) {
+  var plugin = plugins[index];
+
+  if (!plugin) return state;
+
+  var nextIndex = index + 1;
+
+  for (var _len2 = arguments.length, args = Array(_len2 > 5 ? _len2 - 5 : 0), _key2 = 5; _key2 < _len2; _key2++) {
+    args[_key2 - 5] = arguments[_key2];
+  }
+
+  if (!plugin[method]) {
+    return callEventMethodsOfPlugins.apply(undefined, [nextIndex, method, plugins, state, editor].concat(args));
+  }
+
+  var nextState = plugin[method].apply(plugin, args.concat([state, editor]));
+
+  if (nextState == null) {
+    return callEventMethodsOfPlugins.apply(undefined, [nextIndex, method, plugins, state, editor].concat(args));
+  }
+
+  if (nextState.inSequence) {
+    assertState(nextState.state);
+
+    return callEventMethodsOfPlugins.apply(undefined, [nextIndex, method, plugins, nextState.state, editor].concat(args));
+  }
+
+  assertState(nextState);
+
+  return nextState;
+}
+
 /**
  * Mix in the event handler methods.
  *
@@ -13645,40 +13693,11 @@ try {
     Stack.prototype[method] = function (state, editor) {
       debug(method);
 
-      for (var _len2 = arguments.length, args = Array(_len2 > 2 ? _len2 - 2 : 0), _key2 = 2; _key2 < _len2; _key2++) {
-        args[_key2 - 2] = arguments[_key2];
+      for (var _len3 = arguments.length, args = Array(_len3 > 2 ? _len3 - 2 : 0), _key3 = 2; _key3 < _len3; _key3++) {
+        args[_key3 - 2] = arguments[_key3];
       }
 
-      var _iteratorNormalCompletion6 = true;
-      var _didIteratorError6 = false;
-      var _iteratorError6 = undefined;
-
-      try {
-        for (var _iterator6 = this.plugins[Symbol.iterator](), _step6; !(_iteratorNormalCompletion6 = (_step6 = _iterator6.next()).done); _iteratorNormalCompletion6 = true) {
-          var plugin = _step6.value;
-
-          if (!plugin[method]) continue;
-          var next = plugin[method].apply(plugin, args.concat([state, editor]));
-          if (next == null) continue;
-          assertState(next);
-          return next;
-        }
-      } catch (err) {
-        _didIteratorError6 = true;
-        _iteratorError6 = err;
-      } finally {
-        try {
-          if (!_iteratorNormalCompletion6 && _iterator6.return) {
-            _iterator6.return();
-          }
-        } finally {
-          if (_didIteratorError6) {
-            throw _iteratorError6;
-          }
-        }
-      }
-
-      return state;
+      return callEventMethodsOfPlugins.apply(undefined, [0, method, this.plugins, state, editor].concat(args));
     };
   };
 
@@ -13724,17 +13743,17 @@ try {
         state = this.onBeforeChange(state, editor);
       }
 
-      for (var _len3 = arguments.length, args = Array(_len3 > 2 ? _len3 - 2 : 0), _key3 = 2; _key3 < _len3; _key3++) {
-        args[_key3 - 2] = arguments[_key3];
+      for (var _len4 = arguments.length, args = Array(_len4 > 2 ? _len4 - 2 : 0), _key4 = 2; _key4 < _len4; _key4++) {
+        args[_key4 - 2] = arguments[_key4];
       }
 
-      var _iteratorNormalCompletion7 = true;
-      var _didIteratorError7 = false;
-      var _iteratorError7 = undefined;
+      var _iteratorNormalCompletion6 = true;
+      var _didIteratorError6 = false;
+      var _iteratorError6 = undefined;
 
       try {
-        for (var _iterator7 = this.plugins[Symbol.iterator](), _step7; !(_iteratorNormalCompletion7 = (_step7 = _iterator7.next()).done); _iteratorNormalCompletion7 = true) {
-          var plugin = _step7.value;
+        for (var _iterator6 = this.plugins[Symbol.iterator](), _step6; !(_iteratorNormalCompletion6 = (_step6 = _iterator6.next()).done); _iteratorNormalCompletion6 = true) {
+          var plugin = _step6.value;
 
           if (!plugin[method]) continue;
           var next = plugin[method].apply(plugin, args.concat([state, editor]));
@@ -13743,16 +13762,16 @@ try {
           state = next;
         }
       } catch (err) {
-        _didIteratorError7 = true;
-        _iteratorError7 = err;
+        _didIteratorError6 = true;
+        _iteratorError6 = err;
       } finally {
         try {
-          if (!_iteratorNormalCompletion7 && _iterator7.return) {
-            _iterator7.return();
+          if (!_iteratorNormalCompletion6 && _iterator6.return) {
+            _iterator6.return();
           }
         } finally {
-          if (_didIteratorError7) {
-            throw _iteratorError7;
+          if (_didIteratorError6) {
+            throw _iteratorError6;
           }
         }
       }
@@ -29772,20 +29791,20 @@ function useColors() {
   // NB: In an Electron preload script, document will be defined but not fully
   // initialized. Since we know we're in Chrome, we'll just detect this case
   // explicitly
-  if (typeof window !== 'undefined' && window && typeof window.process !== 'undefined' && window.process.type === 'renderer') {
+  if (typeof window !== 'undefined' && window.process && window.process.type === 'renderer') {
     return true;
   }
 
   // is webkit? http://stackoverflow.com/a/16459606/376773
   // document is undefined in react-native: https://github.com/facebook/react-native/pull/1632
-  return (typeof document !== 'undefined' && document && 'WebkitAppearance' in document.documentElement.style) ||
+  return (typeof document !== 'undefined' && document.documentElement && document.documentElement.style && document.documentElement.style.WebkitAppearance) ||
     // is firebug? http://stackoverflow.com/a/398120/376773
-    (typeof window !== 'undefined' && window && window.console && (console.firebug || (console.exception && console.table))) ||
+    (typeof window !== 'undefined' && window.console && (window.console.firebug || (window.console.exception && window.console.table))) ||
     // is firefox >= v31?
     // https://developer.mozilla.org/en-US/docs/Tools/Web_Console#Styling_messages
-    (typeof navigator !== 'undefined' && navigator && navigator.userAgent && navigator.userAgent.toLowerCase().match(/firefox\/(\d+)/) && parseInt(RegExp.$1, 10) >= 31) ||
+    (typeof navigator !== 'undefined' && navigator.userAgent && navigator.userAgent.toLowerCase().match(/firefox\/(\d+)/) && parseInt(RegExp.$1, 10) >= 31) ||
     // double check webkit in userAgent just in case we are in a worker
-    (typeof navigator !== 'undefined' && navigator && navigator.userAgent && navigator.userAgent.toLowerCase().match(/applewebkit\/(\d+)/));
+    (typeof navigator !== 'undefined' && navigator.userAgent && navigator.userAgent.toLowerCase().match(/applewebkit\/(\d+)/));
 }
 
 /**
